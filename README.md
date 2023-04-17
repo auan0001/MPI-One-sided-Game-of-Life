@@ -2,7 +2,7 @@
 
 ## About
 
-This is an excerpt from my BSc thesis in the Engineering Physics programme at the dept. of Computational Science, Uppsala universitet. The data passing between the nearest neighbors is done through halo exchange by derived datatypes of boundary rows and columns
+This is an excerpt from my BSc thesis in the Engineering Physics programme at the dept. of Computational Science, Uppsala universitet. From this repository, the One-sided implementation as well as a two-sided `MPI_Sendrecv` (for comparison) can be compiled to run on a system with an installation of `OpenMPI`. The data passing between the nearest neighbors is done through halo exchange by using derived datatypes of boundary rows and columns
 
 ![Halo exchange](https://github.com/auan0001/MPI-One-sided-Game-of-Life/blob/main/images/gol_gh_halo.png)
 
@@ -25,7 +25,7 @@ Either <NPROCS> not a perfect square or \n<PROBLEM SIZE> not divisible by sqrt<N
 will be written to the console.
 
 ## Results
-This is results from running the code on the [UPPMAX Rackham](https://www.uppmax.uu.se/resources/systems/the-rackham-cluster/) cluster.
+This is results from running the code on the [UPPMAX Rackham](https://www.uppmax.uu.se/resources/systems/the-rackham-cluster/) cluster using the modules `GCC 9.2.0` and `OpenMPI 4.0.2`.
 
 ### Runtime
 ![Runtime](https://github.com/auan0001/MPI-One-sided-Game-of-Life/blob/main/images/gol_gh_run.png)
