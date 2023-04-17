@@ -1,4 +1,8 @@
 # Game of Life One-sided MPI
+## About
+
+This is an excerpt from my BSc thesis in the Engineering Physics programme at the dept. of Computational Science, Uppsala universitet. The data passing between the nearest neighbors is done through halo exchange
+
 ## Compiling and running
 Clone the repository and run `Make` in the root directory.
 
