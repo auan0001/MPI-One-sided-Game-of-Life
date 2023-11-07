@@ -1,10 +1,14 @@
 #include "utils.h"
 
+// Main driver function
 int main(int argc, char *argv[]) {
+
   // Communicator size and ranks
   int comm_sz, rank, cart_rank;
+
   // Input args
-  int args[3], N, iters, visualize;
+  int args[NUMBER_OF_ARGS], N, iters, visualize;
+
   // Memory pointers
   int *state, *this_state, *temp_state, *next_state;
   double start, stop, time, time_max;
@@ -20,41 +24,57 @@ int main(int argc, char *argv[]) {
 
   // Check input args
   if (rank == ROOT) {
-    for (int i = 0; i < 3; ++i) {
-      args[i] = atoi(argv[i+1]);
+
+    // Check number of args
+    if (argc != NUMBER_OF_ARGS+1) {
+      printf("-----------------------------------------------------------------"
+             "---------\n");
+      fprintf(stderr,
+          "Usage: mpirun -np <NPROCS> %s <SIZE> <ITERS> <VISUALIZE (1 or 0)>\n",
+          argv[0]);
+      MPI_Abort(MPI_COMM_WORLD, INIT_ERR);
     }
-    if (argc < 4) {
-      printf("--------------------------------------------------------------------------\n");
-      printf("Usage: mpirun -np <NPROCS> <ONESIDED_GOL> <SIZE> <ITER> <VISUALIZE>\n");
-      MPI_Abort(MPI_COMM_WORLD, 1);
+
+    // Check perfect square
+    if (comm_sz % (int)sqrt(comm_sz) || atoi(argv[1]) % ((int)sqrt(comm_sz))) {
+      printf("-----------------------------------------------------------------"
+             "---------\n");
+      fprintf(stderr, "Either <NPROCS> not a perfect square or \n<PROBLEM SIZE> not "
+             "divisible by sqrt<NPROCS>\n");
+      MPI_Abort(MPI_COMM_WORLD, PERFECT_SQUARE_ERR);
     }
-    if (comm_sz%(int)sqrt(comm_sz) || atoi(argv[1])%((int)sqrt(comm_sz))) {
-      printf("--------------------------------------------------------------------------\n");
-      printf("Either <NPROCS> not a perfect square or \n<PROBLEM SIZE> not divisible by sqrt<NPROCS>\n");
-      MPI_Abort(MPI_COMM_WORLD, 2);
+
+    // Iterate through args with +1 offset 
+    for (int i = 0; i < NUMBER_OF_ARGS; ++i) {
+      args[i] = atoi(argv[i + 1]);
     }
   }
-  // Bcast argv since MPI does not guarantee args to all PE:s
-  MPI_Bcast(args, 3, MPI_INT, ROOT, MPI_COMM_WORLD);
+  // Bcast args since MPI does not guarantee args to all PE:s
+  MPI_Bcast(args, NUMBER_OF_ARGS, MPI_INT, ROOT, MPI_COMM_WORLD);
 
+  // Get args unrolled
   N = args[0];
   iters = args[1];
   visualize = args[2];
 
+
   // Input arg for N x N per process
   const int block_sz = (N)/sqrt(comm_sz); 
 
-  // Calculate starts
-  const int halo_sz = block_sz+2;
-  const int halo_mat = halo_sz*halo_sz;
+  // Calculate starting points:
+  // Size of halo region is the block size padded with +2
+  const int halo_sz = block_sz + 2;
+  // Matrix size for halo matrix, for convenience
+  const int halo_mat_sz = halo_sz * halo_sz;
 
-  // Row dataype in contiguous memory
+  // Row dataype, excluding the corner, in contiguous memory
   MPI_Datatype row_type;
   MPI_Type_contiguous(block_sz, MPI_INT, &row_type);
   MPI_Type_commit(&row_type);
 
   // Column datatype containing the corner
   // which eliminates intercardinal communication
+  // i.e diagonal exchange of corners.
   MPI_Datatype col_type;
   MPI_Type_vector(halo_sz, 1, halo_sz, MPI_INT, &col_type);
   MPI_Type_commit(&col_type);
@@ -75,13 +95,13 @@ int main(int argc, char *argv[]) {
   // Find nearest neighbours
   MPI_Cart_shift(cart_comm, ROW_DIM, NEAREST_NBRS, &nbrs[0], &nbrs[1]);
   MPI_Cart_shift(cart_comm, COL_DIM, NEAREST_NBRS, &nbrs[2], &nbrs[3]);
-  enum DIRECTIONS {WEST, EAST, SOUTH, NORTH};
+  enum DIRECTIONS { WEST, EAST, SOUTH, NORTH };
 
   // Let MPI allocate row-major memory since it _might_ be faster in RMA.
   // The first half of the region contains 'next_state' followed 
   // by 'this_state'
   MPI_Alloc_mem(2*halo_sz*halo_sz*sizeof(int), MPI_INFO_NULL, &state);
-  this_state = state+halo_mat;
+  this_state = state+halo_mat_sz;
   next_state = state;
 
   // Initialize inner N x N matrix to random 0/1
@@ -90,7 +110,11 @@ int main(int argc, char *argv[]) {
   start = MPI_Wtime();
   for (int i = 0; i < iters; ++i) {
 
-    // Send and receive within the cartesian neighbours
+    // Send and receive within the cartesian neighbours.
+	// The offset allows
+    // putting the boundary value alternating between
+    // this_state and next_state.
+
     MPI_Sendrecv(&this_state[UP_ROW_POS], 1, row_type, nbrs[SOUTH],
         TAG, &state[DOWN_HALO_POS+TIMESTEP_OFFSET], 1, row_type, nbrs[NORTH],
         TAG, cart_comm, MPI_STATUS_IGNORE);
@@ -112,20 +136,26 @@ int main(int argc, char *argv[]) {
     next_state = this_state;
     this_state = temp_state;
 
-    if (visualize == 1) {CLEAR_AND_PRINT_STATE}
+    // Prints state from ROOT
+    // Omitted in performance evaluation to avoid branching
+    if (visualize == 1) {
+      CLEAR_AND_PRINT_STATE
+    }
   }
 
   stop = MPI_Wtime();
 
-  time = stop-start;
+  time = stop - start;
 
-  // Get the maximum runtime from one of the processes
+  // Get the maximum runtime among the processes
   MPI_Reduce(&time, &time_max, 1, MPI_DOUBLE, MPI_MAX, ROOT, cart_comm);
 
+  // Print reduced maximum
   if (cart_rank == ROOT){
     printf("%d, %d, %d, %lf\n", iters, N, comm_sz, time_max);
   }
 
+  // Free types, memory and finalize
   MPI_Type_free(&col_type);
   MPI_Type_free(&row_type);
   MPI_Free_mem(state);

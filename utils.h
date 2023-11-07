@@ -8,6 +8,12 @@
 #include <math.h>
 #include <unistd.h>
 #include <mpi.h>
+#include <SDL2/SDL.h>
+
+// Args and errors
+#define NUMBER_OF_ARGS 3
+#define INIT_ERR 1
+#define PERFECT_SQUARE_ERR 2
 
 // For the cartesian topology
 #define NEAREST_NBRS 1
